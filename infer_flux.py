@@ -24,20 +24,22 @@ def make_infer_pipeline(dist_type, device):
     dtype = torch.bfloat16
     pipeline = FluxPipeline.from_pretrained(
         "black-forest-labs/FLUX.1-dev",
-        torch_dtype=torch.bfloat16
+        torch_dtype=dtype,
     )
-
-    if not is_npu:
-        apply_compile(pipeline.transformer, FluxAttnProcessor2_0())
 
     mesh = init_device_mesh(
         "cuda", (dist.get_world_size(),))
-    if dist_type == 'fsdp':
-        apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
-    elif dist_type == 'tp':
-        apply_tp(pipeline.transformer, mesh)
+    if not is_npu:
+        if dist_type == 'fsdp':
+            apply_compile(pipeline.transformer, FluxAttnProcessor2_0())
+            apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
+        else:
+            apply_tp(pipeline.transformer, mesh)
+            apply_compile(pipeline.transformer, FluxAttnProcessor2_0())
     else:
-        assert False
+        assert dist_type == 'fsdp'
+        apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
+
     pipeline = pipeline.to(device=device, dtype=dtype)
 
     torch.cuda.empty_cache()
