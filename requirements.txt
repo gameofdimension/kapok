@@ -1,0 +1,14 @@
+accelerate==1.1.0
+diffusers==0.32.1
+torch==2.5.1
+torchvision==0.20.1
+tqdm==4.66.5
+transformers==4.46.3
+numpy==1.26.4
+sentencepiece==0.2.0
+peft==0.13.2
+wandb==0.16.0
+pandas==2.2.3
+boto3==1.35.55
+opencv-python-headless==4.10.0.84
+einops==0.8.0
