@@ -84,7 +84,7 @@ def main():
 
     rank = dist.get_rank()
     height, width = 1024, 1024
-    prompt = get_prompt(rank)
+    prompt = get_prompt(rank, dist_type)
     image = pipeline(
         prompt,
         height=height,
