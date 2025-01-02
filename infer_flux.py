@@ -27,9 +27,9 @@ def make_infer_pipeline(dist_type, device):
         torch_dtype=dtype,
     )
 
-    mesh = init_device_mesh(
-        "cuda", (dist.get_world_size(),))
     if not is_npu:
+        mesh = init_device_mesh(
+            "cuda", (dist.get_world_size(),))
         if dist_type == 'fsdp':
             apply_compile(pipeline.transformer, FluxAttnProcessor2_0())
             apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
@@ -37,8 +37,12 @@ def make_infer_pipeline(dist_type, device):
             apply_tp(pipeline.transformer, mesh)
             apply_compile(pipeline.transformer, FluxAttnProcessor2_0())
     else:
-        assert dist_type == 'fsdp'
-        apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
+        mesh = init_device_mesh(
+            "npu", (dist.get_world_size(),))
+        if dist_type == 'fsdp':
+            apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
+        else:
+            apply_tp(pipeline.transformer, mesh)
 
     pipeline = pipeline.to(device=device, dtype=dtype)
 
