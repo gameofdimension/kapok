@@ -99,5 +99,6 @@ def main():
     cleanup()
 
 
+# torchrun --nproc-per-node=4 -m infer_flux 666 fsdp
 if __name__ == '__main__':
     main()
