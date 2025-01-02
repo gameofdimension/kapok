@@ -47,10 +47,10 @@ def make_infer_pipeline(dist_type, device):
 def get_prompt(rank, infer_type):
     prompts = [
         "A cat holding a sign that says hello world",
-        "A cat holding a sign that says hello world",
-        "A diver holding a sign that says hello world",
         "Beautiful illustration of The ocean. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
+        "A diver holding a sign that says hello world",
         "Beautiful illustration of Islands in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
+        "A snake holding a sign that says hello world",
         "Beautiful illustration of Seaports in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
         "Beautiful illustration of The waves. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
         "Beautiful illustration of Grassland. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
