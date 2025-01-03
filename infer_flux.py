@@ -15,7 +15,8 @@ from diffusers import FluxPipeline
 from diffusers.models.attention_processor import FluxAttnProcessor2_0
 from torch.distributed.device_mesh import init_device_mesh
 
-from flux.fsdp_parallelize import apply_compile, apply_fsdp
+from flux.fsdp_parallelize import (apply_compile, apply_fsdp, t5_apply_compile,
+                                   t5_apply_fsdp)
 from flux.tp_parallelize import apply_tp
 from tool.utils import cleanup, init_distributed
 
@@ -33,9 +34,12 @@ def make_infer_pipeline(dist_type, device):
         if dist_type == 'fsdp':
             apply_compile(pipeline.transformer, FluxAttnProcessor2_0())
             apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
+            t5_apply_compile(pipeline.text_encoder_2)
+            t5_apply_fsdp(pipeline.text_encoder_2, mesh)
         else:
             apply_tp(pipeline.transformer, mesh)
             apply_compile(pipeline.transformer, FluxAttnProcessor2_0())
+            t5_apply_compile(pipeline.text_encoder_2)
     else:
         mesh = init_device_mesh(
             "npu", (dist.get_world_size(),))

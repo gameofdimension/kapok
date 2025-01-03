@@ -5,6 +5,12 @@ from torch.distributed._composable.fsdp import (MixedPrecisionPolicy,
                                                 fully_shard)
 
 
+def t5_apply_compile(model: nn.Module):
+    for name, transformer_block in model.encoder.block.named_children():
+        transformer_block = torch.compile(transformer_block, fullgraph=True)
+        model.encoder.block.register_module(name, transformer_block)
+
+
 def apply_compile(model: nn.Module, attn_processor):
     """
     Apply torch.compile to each TransformerBlock,
@@ -21,6 +27,25 @@ def apply_compile(model: nn.Module, attn_processor):
         transformer_block.attn.set_processor(attn_processor)
         transformer_block = torch.compile(transformer_block, fullgraph=True)
         model.single_transformer_blocks.register_module(name, transformer_block)
+
+
+def t5_apply_fsdp(
+    model: nn.Module,
+    dp_mesh: DeviceMesh,
+):
+    param_dtype = torch.bfloat16
+    reduce_dtype = torch.float32
+    mp_policy = MixedPrecisionPolicy(
+        param_dtype=param_dtype, reduce_dtype=reduce_dtype)
+    fsdp_config = {"mesh": dp_mesh, "mp_policy": mp_policy}
+
+    for layer_id, transformer_block in enumerate(model.encoder.block):
+        fully_shard(
+            transformer_block,
+            **fsdp_config,
+            reshard_after_forward=True,
+        )
+    fully_shard(model, **fsdp_config, reshard_after_forward=True)
 
 
 def apply_fsdp(
