@@ -1,7 +1,3 @@
-
-import csv
-import os
-
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 
@@ -75,8 +71,8 @@ class T2VPrompts(Dataset):
         return len(self.prompts)
 
 
-def make_dataloader(path, batch_size):
-    dataset = T2VPrompts(path)
+def make_dataloader(batch_size):
+    dataset = T2VPrompts()
     sampler = DistributedSampler(dataset)
     dataloader = DataLoader(
         dataset=dataset,

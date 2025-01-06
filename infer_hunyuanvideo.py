@@ -3,6 +3,8 @@ import sys
 
 import torch
 
+from hunyuanvideo.data import make_dataloader
+
 try:
     import torch_npu  # type: ignore # noqa
     from torch_npu.contrib import transfer_to_npu  # type: ignore # noqa
@@ -12,7 +14,6 @@ except ImportError:
     is_npu = False
 import torch.distributed as dist
 from diffusers import HunyuanVideoPipeline
-# from diffusers import FluxPipeline
 from diffusers.models.transformers.transformer_hunyuan_video import \
     HunyuanVideoAttnProcessor2_0
 from diffusers.utils import export_to_video
@@ -81,16 +82,22 @@ def main():
 
     rank = dist.get_rank()
     height, width = 320, 512
-    prompt = "A cat walks on the grass, realistic"
-    output = pipeline(
-        prompt=prompt,
-        height=height,
-        width=width,
-        num_frames=61,
-        num_inference_steps=30,
-        generator=generator,
-    ).frames[0]
-    export_to_video(output, f"output-{rank}.mp4", fps=15)
+    batch_size = 1
+    dataloader = make_dataloader(batch_size=batch_size)
+    for batch in dataloader:
+        prompt = batch[0]
+        output = pipeline(
+            prompt=prompt,
+            height=height,
+            width=width,
+            num_frames=61,
+            num_inference_steps=30,
+            generator=generator,
+        ).frames[0]
+        export_to_video(output, f"output-{round}-{rank}.mp4", fps=15)
+        round -= 1
+        if round <= 0:
+            break
 
     cleanup()
 
