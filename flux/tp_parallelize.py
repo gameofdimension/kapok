@@ -70,3 +70,28 @@ def apply_tp(
             device_mesh=tp_mesh,
             parallelize_plan=layer_plan,
         )
+
+
+def t5_apply_tp(
+    model: nn.Module,
+    tp_mesh: DeviceMesh,
+):
+    for i, block in enumerate(model.encoder.block):
+        block.layer[0].SelfAttention.n_heads //= tp_mesh.size()
+        block.layer[0].SelfAttention.inner_dim //= tp_mesh.size()
+        layer_plan = {
+            "layer.0.SelfAttention.q": ColwiseParallel(),
+            "layer.0.SelfAttention.k": ColwiseParallel(),
+            "layer.0.SelfAttention.v": ColwiseParallel(),
+            "layer.0.SelfAttention.o": RowwiseParallel(),
+            "layer.1.DenseReluDense.wi_0": ColwiseParallel(),
+            "layer.1.DenseReluDense.wi_1": ColwiseParallel(),
+            "layer.1.DenseReluDense.wo": RowwiseParallel(),
+        }
+        if i == 0:
+            layer_plan["layer.0.SelfAttention.relative_attention_bias"] = ColwiseParallel()
+        parallelize_module(
+            module=block,
+            device_mesh=tp_mesh,
+            parallelize_plan=layer_plan,
+        )
