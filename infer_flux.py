@@ -15,6 +15,7 @@ from diffusers import FluxPipeline
 from diffusers.models.attention_processor import FluxAttnProcessor2_0
 from torch.distributed.device_mesh import init_device_mesh
 
+from flux.data import make_dataloader
 from flux.fsdp_parallelize import (apply_compile, apply_fsdp, t5_apply_compile,
                                    t5_apply_fsdp)
 from flux.tp_parallelize import apply_tp, t5_apply_tp
@@ -57,37 +58,10 @@ def make_infer_pipeline(dist_type, device):
     return pipeline
 
 
-def get_prompt(rank, infer_type):
-    prompts = [
-        "A cat holding a sign that says hello world",
-        "Beautiful illustration of The ocean. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "A diver holding a sign that says hello world",
-        "Beautiful illustration of Islands in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "A snake holding a sign that says hello world",
-        "Beautiful illustration of Seaports in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of The waves. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Grassland. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Wheat. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Hut Tong. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of The boat. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Pine trees. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Bamboo. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of The temple. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Cloud in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Sun in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Spring. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Lotus. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-        "Beautiful illustration of Snow piles. in a serene landscape, magic realism, narrative realism, beautiful matte painting, heavenly lighting, retrowave, 4 k hd wallpaper",
-    ]
-    if infer_type == 'fsdp':
-        return prompts[rank]
-    if infer_type == 'tp':
-        return prompts[random.randint(0, len(prompts) - 1)]
-
-
 def main():
     seed = int(sys.argv[1])
     dist_type = sys.argv[2]
+    round = int(sys.argv[3])
     assert dist_type in ['fsdp', 'tp']
     init_distributed()
 
@@ -97,17 +71,25 @@ def main():
 
     rank = dist.get_rank()
     height, width = 1024, 1024
-    prompt = get_prompt(rank, dist_type)
-    image = pipeline(
-        prompt,
-        height=height,
-        width=width,
-        guidance_scale=3.5,
-        num_inference_steps=50,
-        max_sequence_length=512,
-        generator=generator,
-    ).images[0]
-    image.save(f"t2i-{height}x{width}-{rank}.png")
+    batch_size = 1
+    path = './flux/prompts/PartiPrompts.tsv'
+    dataloader = make_dataloader(path=path, batch_size=batch_size)
+
+    for batch in dataloader:
+        prompt = batch[0]
+        image = pipeline(
+            prompt,
+            height=height,
+            width=width,
+            guidance_scale=3.5,
+            num_inference_steps=50,
+            max_sequence_length=512,
+            generator=generator,
+        ).images[0]
+        image.save(f"t2i-{height}x{width}-{round}-{rank}.png")
+        round -= 1
+        if round <= 0:
+            break
 
     cleanup()
 
