@@ -16,9 +16,9 @@ from diffusers.models.attention_processor import FluxAttnProcessor2_0
 from torch.distributed.device_mesh import init_device_mesh
 
 from flux.data import make_dataloader
-from flux.fsdp_parallelize import (apply_compile, apply_fsdp, t5_apply_compile,
-                                   t5_apply_fsdp)
-from flux.tp_parallelize import apply_tp, t5_apply_tp
+from titan.fsdp_parallelize import (apply_compile, apply_fsdp,
+                                    t5_apply_compile, t5_apply_fsdp)
+from titan.tp_parallelize import apply_tp, t5_apply_tp
 from tool.utils import cleanup, init_distributed
 
 
