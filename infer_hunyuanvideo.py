@@ -49,13 +49,19 @@ def make_infer_pipeline(dist_type, device):
             llama_apply_compile(pipeline.text_encoder)
             llama_apply_fsdp(pipeline.text_encoder, mesh)
         else:
-            # apply_tp(pipeline.transformer, mesh)
-            # apply_compile(pipeline.transformer, HunyuanVideoAttnProcessor2_0())
+            apply_tp(pipeline.transformer, mesh)
+            apply_compile(pipeline.transformer, HunyuanVideoAttnProcessor2_0())
             llama_apply_tp(pipeline.text_encoder, mesh)
             llama_apply_compile(pipeline.text_encoder)
     else:
-        assert dist_type == 'fsdp'
-        apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
+        mesh = init_device_mesh(
+            "npu", (dist.get_world_size(),))
+        if dist_type == 'fsdp':
+            apply_fsdp(pipeline.transformer, mesh, pipeline.transformer.config.num_single_layers)
+            llama_apply_fsdp(pipeline.text_encoder, mesh)
+        else:
+            apply_tp(pipeline.transformer, mesh)
+            llama_apply_tp(pipeline.text_encoder, mesh)
 
     pipeline = pipeline.to(device=device, dtype=dtype)
 

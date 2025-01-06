@@ -95,3 +95,26 @@ def t5_apply_tp(
             device_mesh=tp_mesh,
             parallelize_plan=layer_plan,
         )
+
+
+def llama_apply_tp(
+    model: nn.Module,
+    tp_mesh: DeviceMesh,
+):
+    for i, block in enumerate(model.layers):
+        block.self_attn.num_heads //= tp_mesh.size()
+        block.self_attn.num_key_value_heads //= tp_mesh.size()
+        layer_plan = {
+            "self_attn.q_proj": ColwiseParallel(),
+            "self_attn.k_proj": ColwiseParallel(),
+            "self_attn.v_proj": ColwiseParallel(),
+            "self_attn.o_proj": RowwiseParallel(),
+            "mlp.gate_proj": ColwiseParallel(),
+            "mlp.up_proj": ColwiseParallel(),
+            "mlp.down_proj": RowwiseParallel(),
+        }
+        parallelize_module(
+            module=block,
+            device_mesh=tp_mesh,
+            parallelize_plan=layer_plan,
+        )
