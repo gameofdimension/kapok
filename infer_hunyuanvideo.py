@@ -28,7 +28,7 @@ from tool.utils import cleanup, init_distributed
 
 def make_infer_pipeline(dist_type, device):
     dtype = torch.bfloat16
-    model_id = '/apps/dat/file/llm/model/hunyuanvideo-community-HunyuanVideo'
+    model_id = "hunyuanvideo-community/HunyuanVideo"
 
     text_encoder = LlamaModel.from_pretrained(f'{model_id}/text_encoder')
     text_encoder.config.use_cache = False
@@ -37,9 +37,6 @@ def make_infer_pipeline(dist_type, device):
         torch_dtype=dtype,
         text_encoder=text_encoder,
     )
-
-    # for m in pipeline.text_encoder.named_modules():
-    #     print(m[0])
 
     mesh = init_device_mesh(
         "cuda", (dist.get_world_size(),))
