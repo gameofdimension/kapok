@@ -1,9 +1,12 @@
 import random
 import sys
+from typing import Optional
 
 import torch
-
-from hunyuanvideo.data import make_dataloader
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
+from torch.nn.modules.utils import _triple
 
 try:
     import torch_npu  # type: ignore # noqa
@@ -12,6 +15,7 @@ try:
 except ImportError:
     print("torch_npu not found")
     is_npu = False
+
 import torch.distributed as dist
 from diffusers import HunyuanVideoPipeline
 from diffusers.models.transformers.transformer_hunyuan_video import \
@@ -20,10 +24,67 @@ from diffusers.utils import export_to_video
 from torch.distributed.device_mesh import init_device_mesh
 from transformers.models.llama import LlamaModel
 
+from hunyuanvideo.data import make_dataloader
 from titan.fsdp_parallelize import (apply_compile, apply_fsdp,
                                     llama_apply_compile, llama_apply_fsdp)
 from titan.tp_parallelize import apply_tp, llama_apply_tp
 from tool.utils import cleanup, init_distributed
+
+
+class MyConv3d(nn.Conv3d):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
+        if self.padding_mode != "zeros":
+            dtype = input.dtype
+            input = F.pad(
+                input.to(dtype=torch.float32), self._reversed_padding_repeated_twice, mode=self.padding_mode
+            ).to(dtype=dtype)
+            return torch_npu.npu_conv3d(
+                input,
+                weight,
+                bias,
+                self.stride,
+                _triple(0),
+                self.dilation,
+                self.groups,
+            )
+        return torch_npu.npu_conv3d(
+            input, weight, bias, self.stride, self.padding, self.dilation, self.groups)
+
+    def forward(self, input: Tensor) -> Tensor:
+        return self._conv_forward(input, self.weight, self.bias)
+
+
+def copy_params(src, dst):
+    state_dict = dst.state_dict()
+    for name, param in src.named_parameters():
+        assert name in state_dict
+        state_dict[name].copy_(param)
+
+
+def recursive_replace_conv3d(model, device, dtype):
+    for name, child in model.named_children():
+        if isinstance(child, nn.Conv3d):
+            mod = MyConv3d(
+                child.in_channels,
+                child.out_channels,
+                child.kernel_size,
+                child.stride,
+                child.padding,
+                child.dilation,
+                child.groups,
+                child.bias is not None,
+                child.padding_mode,
+                device,
+                dtype,
+            )
+            copy_params(child, mod)
+            setattr(model, name, mod)
+            del child
+        else:
+            recursive_replace_conv3d(child, device, dtype)
 
 
 def make_infer_pipeline(dist_type, device):
@@ -61,7 +122,11 @@ def make_infer_pipeline(dist_type, device):
             apply_tp(pipeline.transformer, mesh)
             llama_apply_tp(pipeline.text_encoder, mesh)
 
-    pipeline = pipeline.to(device=device, dtype=dtype)
+    pipeline.vae.to(device=device, dtype=dtype)
+    recursive_replace_conv3d(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
+    pipeline.text_encoder.to(device=device)
+    pipeline.text_encoder_2.to(device=device)
+    # pipeline = pipeline.to(device=device, dtype=dtype)
 
     torch.cuda.empty_cache()
     return pipeline
