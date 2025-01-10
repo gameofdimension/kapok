@@ -101,12 +101,13 @@ def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch
 
 
 def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    dtype = hidden_states.dtype
     num_frames = hidden_states.size(2)
 
     first_frame, other_frames = hidden_states.split((1, num_frames - 1), dim=2)
     first_frame = F.interpolate(
         first_frame.float().squeeze(2), scale_factor=self.upsample_factor[1:], mode="nearest"
-    ).to(dtype=first_frame.dtype).unsqueeze(2)
+    ).to(dtype=dtype).unsqueeze(2)
 
     if num_frames > 1:
         # See: https://github.com/pytorch/pytorch/issues/81665
@@ -118,7 +119,7 @@ def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> t
         other_frames = other_frames.contiguous()
         other_frames = F.interpolate(
             other_frames.float(), scale_factor=self.upsample_factor, mode="nearest"
-        ).to(dtype=other_frames.dtype)
+        ).to(dtype=dtype)
         hidden_states = torch.cat((first_frame, other_frames), dim=2)
     else:
         hidden_states = first_frame
