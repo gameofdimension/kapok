@@ -70,6 +70,7 @@ def make_infer_pipeline(dist_type, device):
 def main():
     seed = int(sys.argv[1])
     dist_type = sys.argv[2]
+    round = int(sys.argv[3])
     assert dist_type in ['fsdp', 'tp']
     init_distributed()
 
