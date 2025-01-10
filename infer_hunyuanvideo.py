@@ -101,6 +101,14 @@ def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch
     return self.conv(hidden_states)
 
 
+def fp32_pad(input, padding, mode, value):
+    dtype = input.dtype
+    input = F.pad(
+        input.to(torch.float32), padding, mode=mode, value=value
+    ).to(dtype=dtype)
+    return input
+
+
 def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
     dtype = hidden_states.dtype
     num_frames = hidden_states.size(2)
