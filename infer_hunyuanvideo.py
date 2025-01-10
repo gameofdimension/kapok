@@ -94,9 +94,10 @@ def recursive_patch_vae(model, device, dtype):
 
 
 def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    dtype = hidden_states.dtype
     hidden_states = F.pad(
         hidden_states.float(), self.time_causal_padding, mode=self.pad_mode
-    ).to(dtype=hidden_states.dtype)
+    ).to(dtype=dtype)
     return self.conv(hidden_states)
 
 
