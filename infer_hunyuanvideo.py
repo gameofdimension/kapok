@@ -18,6 +18,8 @@ except ImportError:
 
 import torch.distributed as dist
 from diffusers import HunyuanVideoPipeline
+from diffusers.models.autoencoders.autoencoder_kl_hunyuan_video import (
+    HunyuanVideoCausalConv3d, HunyuanVideoUpsampleCausal3D)
 from diffusers.models.transformers.transformer_hunyuan_video import \
     HunyuanVideoAttnProcessor2_0
 from diffusers.utils import export_to_video
@@ -64,7 +66,7 @@ def copy_params(src, dst):
         state_dict[name].copy_(param)
 
 
-def recursive_replace_conv3d(model, device, dtype):
+def recursive_patch_vae(model, device, dtype):
     for name, child in model.named_children():
         if isinstance(child, nn.Conv3d):
             mod = MyConv3d(
@@ -83,8 +85,47 @@ def recursive_replace_conv3d(model, device, dtype):
             copy_params(child, mod)
             setattr(model, name, mod)
             del child
+        elif isinstance(child, HunyuanVideoCausalConv3d):
+            child.forward = HunyuanVideoCausalConv3d_forward.__get__(child, HunyuanVideoCausalConv3d)
+        elif isinstance(child, HunyuanVideoUpsampleCausal3D):
+            child.forward = HunyuanVideoUpsampleCausal3D_forward.__get__(child, HunyuanVideoUpsampleCausal3D)
         else:
-            recursive_replace_conv3d(child, device, dtype)
+            recursive_patch_vae(child, device, dtype)
+
+
+def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    hidden_states = F.pad(
+        hidden_states.float(), self.time_causal_padding, mode=self.pad_mode
+    ).to(dtype=hidden_states.dtype)
+    return self.conv(hidden_states)
+
+
+def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    dtype = hidden_states.dtype
+    hidden_states = hidden_states.float()
+    num_frames = hidden_states.size(2)
+
+    first_frame, other_frames = hidden_states.split((1, num_frames - 1), dim=2)
+    first_frame = F.interpolate(
+        first_frame.squeeze(2), scale_factor=self.upsample_factor[1:], mode="nearest"
+    ).unsqueeze(2)
+
+    if num_frames > 1:
+        # See: https://github.com/pytorch/pytorch/issues/81665
+        # Unless you have a version of pytorch where non-contiguous implementation of F.interpolate
+        # is fixed, this will raise either a runtime error, or fail silently with bad outputs.
+        # If you are encountering an error here, make sure to try running encoding/decoding with
+        # `vae.enable_tiling()` first. If that doesn't work, open an issue at:
+        # https://github.com/huggingface/diffusers/issues
+        other_frames = other_frames.contiguous()
+        other_frames = F.interpolate(other_frames, scale_factor=self.upsample_factor, mode="nearest")
+        hidden_states = torch.cat((first_frame, other_frames), dim=2)
+    else:
+        hidden_states = first_frame
+
+    hidden_states = hidden_states.to(dtype=dtype)
+    hidden_states = self.conv(hidden_states)
+    return hidden_states
 
 
 def make_infer_pipeline(dist_type, device):
@@ -123,10 +164,10 @@ def make_infer_pipeline(dist_type, device):
             llama_apply_tp(pipeline.text_encoder, mesh)
 
     pipeline.vae.to(device=device, dtype=dtype)
-    recursive_replace_conv3d(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
+    if is_npu:
+        recursive_patch_vae(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
     pipeline.text_encoder.to(device=device)
     pipeline.text_encoder_2.to(device=device)
-    # pipeline = pipeline.to(device=device, dtype=dtype)
 
     torch.cuda.empty_cache()
     return pipeline
