@@ -101,14 +101,12 @@ def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch
 
 
 def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-    dtype = hidden_states.dtype
-    hidden_states = hidden_states.float()
     num_frames = hidden_states.size(2)
 
     first_frame, other_frames = hidden_states.split((1, num_frames - 1), dim=2)
     first_frame = F.interpolate(
-        first_frame.squeeze(2), scale_factor=self.upsample_factor[1:], mode="nearest"
-    ).unsqueeze(2)
+        first_frame.float().squeeze(2), scale_factor=self.upsample_factor[1:], mode="nearest"
+    ).to(dtype=first_frame.dtype).unsqueeze(2)
 
     if num_frames > 1:
         # See: https://github.com/pytorch/pytorch/issues/81665
@@ -118,12 +116,13 @@ def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> t
         # `vae.enable_tiling()` first. If that doesn't work, open an issue at:
         # https://github.com/huggingface/diffusers/issues
         other_frames = other_frames.contiguous()
-        other_frames = F.interpolate(other_frames, scale_factor=self.upsample_factor, mode="nearest")
+        other_frames = F.interpolate(
+            other_frames.float(), scale_factor=self.upsample_factor, mode="nearest"
+        ).to(dtype=other_frames.dtype)
         hidden_states = torch.cat((first_frame, other_frames), dim=2)
     else:
         hidden_states = first_frame
 
-    hidden_states = hidden_states.to(dtype=dtype)
     hidden_states = self.conv(hidden_states)
     return hidden_states
 
