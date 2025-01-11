@@ -66,7 +66,7 @@ def copy_params(src, dst):
         state_dict[name].copy_(param)
 
 
-def recursive_patch_vae(model, device, dtype):
+def recursive_patch_conv3d(model, device, dtype):
     for name, child in model.named_children():
         if isinstance(child, nn.Conv3d):
             mod = MyConv3d(
@@ -85,12 +85,24 @@ def recursive_patch_vae(model, device, dtype):
             copy_params(child, mod)
             setattr(model, name, mod)
             del child
-        elif isinstance(child, HunyuanVideoCausalConv3d):
+        else:
+            recursive_patch_conv3d(child, device, dtype)
+
+
+def recursive_patch_pad(model, device, dtype):
+    for name, child in model.named_children():
+        if isinstance(child, HunyuanVideoCausalConv3d):
             child.forward = HunyuanVideoCausalConv3d_forward.__get__(child, HunyuanVideoCausalConv3d)
-        elif isinstance(child, HunyuanVideoUpsampleCausal3D):
+        else:
+            recursive_patch_pad(child, device, dtype)
+
+
+def recursive_patch_inter(model, device, dtype):
+    for name, child in model.named_children():
+        if isinstance(child, HunyuanVideoUpsampleCausal3D):
             child.forward = HunyuanVideoUpsampleCausal3D_forward.__get__(child, HunyuanVideoUpsampleCausal3D)
         else:
-            recursive_patch_vae(child, device, dtype)
+            recursive_patch_inter(child, device, dtype)
 
 
 def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -101,12 +113,14 @@ def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch
     return self.conv(hidden_states)
 
 
-def fp32_pad(input, padding, mode, value):
-    dtype = input.dtype
-    input = F.pad(
-        input.to(torch.float32), padding, mode=mode, value=value
-    ).to(dtype=dtype)
-    return input
+def make_fp32_pad(old_pad):
+    def fp32_pad(input, padding, mode, value=None):
+        dtype = input.dtype
+        input = old_pad(
+            input.to(torch.float32), padding, mode=mode, value=value
+        ).to(dtype=dtype)
+        return input
+    return fp32_pad
 
 
 def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -174,7 +188,12 @@ def make_infer_pipeline(dist_type, device):
 
     pipeline.vae.to(device=device, dtype=dtype)
     if is_npu:
-        recursive_patch_vae(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
+        recursive_patch_conv3d(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
+        recursive_patch_pad(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
+        recursive_patch_inter(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
+        # old_pad = F.pad
+        # fp32_pad = make_fp32_pad(old_pad)
+        # F.pad = fp32_pad
     pipeline.text_encoder.to(device=device)
     pipeline.text_encoder_2.to(device=device)
 
