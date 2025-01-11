@@ -113,16 +113,6 @@ def HunyuanVideoCausalConv3d_forward(self, hidden_states: torch.Tensor) -> torch
     return self.conv(hidden_states)
 
 
-def make_fp32_pad(old_pad):
-    def fp32_pad(input, padding, mode, value=None):
-        dtype = input.dtype
-        input = old_pad(
-            input.to(torch.float32), padding, mode=mode, value=value
-        ).to(dtype=dtype)
-        return input
-    return fp32_pad
-
-
 def HunyuanVideoUpsampleCausal3D_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
     dtype = hidden_states.dtype
     num_frames = hidden_states.size(2)
@@ -191,9 +181,6 @@ def make_infer_pipeline(dist_type, device):
         recursive_patch_conv3d(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
         recursive_patch_pad(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
         recursive_patch_inter(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
-        # old_pad = F.pad
-        # fp32_pad = make_fp32_pad(old_pad)
-        # F.pad = fp32_pad
     pipeline.text_encoder.to(device=device)
     pipeline.text_encoder_2.to(device=device)
 
@@ -234,6 +221,6 @@ def main():
     cleanup()
 
 
-# torchrun --nproc-per-node=4 -m infer_flux 666 fsdp
+# torchrun --nproc-per-node=8 -m infer_hunyuanvideo 333 fsdp 2
 if __name__ == '__main__':
     main()
