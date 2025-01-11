@@ -183,7 +183,7 @@ def make_infer_pipeline(dist_type, device):
         recursive_patch_inter(pipeline.vae, pipeline.vae.device, pipeline.vae.dtype)
     pipeline.text_encoder.to(device=device)
     pipeline.text_encoder_2.to(device=device)
-    pipeline.enable_model_cpu_offload()
+    # pipeline.enable_model_cpu_offload()
 
     torch.cuda.empty_cache()
     return pipeline
