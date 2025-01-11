@@ -10,3 +10,5 @@ pandas==2.2.3
 boto3==1.35.55
 opencv-python-headless==4.10.0.84
 einops==0.8.0
+imageio==2.36.1
+imageio-ffmpeg==0.5.1
